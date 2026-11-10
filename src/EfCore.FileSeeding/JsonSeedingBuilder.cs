@@ -36,7 +36,7 @@ public sealed class JsonSeedingBuilder
     }
 
     /// <summary>
-    /// Файлы <c>*.json</c> и <c>*.csv</c> из папки на диске. Относительный путь считается от папки приложения.
+    /// Файлы <c>*.json</c>, <c>*.csv</c> и <c>*.xlsx</c> из папки на диске. Относительный путь считается от папки приложения.
     /// </summary>
     public JsonSeedingBuilder AddDirectory(string path, bool enabled = true)
     {
@@ -47,7 +47,7 @@ public sealed class JsonSeedingBuilder
     }
 
     /// <summary>
-    /// Особая обработка поля (или столбца CSV). Вызывается, если в записи есть поле <paramref name="jsonProperty"/>.
+    /// Особая обработка поля (или столбца таблицы). Вызывается, если в записи есть поле <paramref name="jsonProperty"/>.
     /// Такое поле может отсутствовать в сущности: например, <c>password</c>, который превращается в хеш.
     /// </summary>
     /// <example>

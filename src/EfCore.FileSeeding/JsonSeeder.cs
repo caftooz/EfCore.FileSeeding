@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 namespace EfCore.JsonSeeding;
 
 /// <summary>
-/// Загружает JSON- и CSV-файлы в базу. Таблицы, ключи и порядок загрузки берутся из модели EF,
+/// Загружает в базу JSON, CSV и листы Excel. Таблицы, ключи и порядок загрузки берутся из модели EF,
 /// поэтому для новой таблицы достаточно добавить файл.
 /// </summary>
 internal sealed class JsonSeeder(JsonSeedingOptions options)
@@ -119,11 +119,14 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
     {
         await using var stream = file.Open();
 
-        if (file.Format == SeedFormat.Csv)
+        if (file.Format is SeedFormat.Csv or SeedFormat.Xlsx)
         {
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer, ct);
-            return CsvSeedReader.Read(buffer.ToArray(), file.Origin, type);
+            var rows = file.Format == SeedFormat.Csv
+                ? CsvSeedReader.Read(buffer.ToArray())
+                : XlsxReader.ReadSheet(buffer.ToArray(), file.Sheet!, file.Origin);
+            return TableSeedReader.Build(rows, file.Origin, type);
         }
 
         JsonDocument document;

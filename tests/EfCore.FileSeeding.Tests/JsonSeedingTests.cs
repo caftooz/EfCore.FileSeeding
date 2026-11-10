@@ -229,4 +229,49 @@ public sealed class JsonSeedingTests : IDisposable
         Assert.Contains("«один»", error.Message);
         Assert.Contains("строка 2", error.Message);
     }
+
+    [Fact]
+    public async Task Xlsx_sheets_are_seeded_as_tables()
+    {
+        await using var db = await CreateEmptyDatabaseAsync();
+        var log = new List<string>();
+
+        await db.SeedFromJsonAsync(seed => seed
+            .AddEmbeddedResources(TestAssembly, "Seed/Xlsx")
+            .Transform<Account>("password", (account, value) => account.PasswordHash = "hash:" + value.GetString())
+            .LogTo(log.Add));
+
+        Assert.Equal(2, await db.Categories.CountAsync());
+
+        var products = await db.Products.OrderBy(p => p.Id).ToListAsync();
+        Assert.Equal(3, products.Count);
+        Assert.Equal("Сок \"Яблочный\"", products[0].Name);
+        Assert.Equal(25.5m, products[0].Price);
+        Assert.Equal(ProductStatus.Active, products[0].Status);
+        Assert.Equal(new DateOnly(2026, 11, 10), products[0].AddedOn);
+        Assert.Equal(1234.5m, products[1].Price);
+        Assert.Equal(ProductStatus.Hidden, products[1].Status);
+        Assert.Null(products[1].AddedOn);
+        Assert.Equal(new DateOnly(2026, 1, 15), products[2].AddedOn);
+
+        Assert.Equal("hash:secret", (await db.Accounts.SingleAsync()).PasswordHash);
+
+        // служебный «_Справка» и пустой «Лист1» пропущены, Categories загружены раньше Products
+        var tables = log.Select(line => line.Split(':')[0]).ToList();
+        Assert.Equal(new[] { "Accounts", "Categories", "Products" }, tables.Order());
+        Assert.True(tables.IndexOf("Categories") < tables.IndexOf("Products"));
+    }
+
+    [Fact]
+    public async Task Xlsx_unknown_column_is_reported_with_sheet_and_line()
+    {
+        await using var db = await CreateEmptyDatabaseAsync();
+
+        var error = await Assert.ThrowsAsync<JsonSeedingException>(
+            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/XlsxTypo")));
+
+        Assert.Contains("Nmae", error.Message);
+        Assert.Contains("лист «Categories»", error.Message);
+        Assert.Contains("строка 2", error.Message);
+    }
 }

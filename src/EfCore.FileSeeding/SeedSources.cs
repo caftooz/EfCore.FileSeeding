@@ -5,24 +5,56 @@ namespace EfCore.JsonSeeding;
 internal enum SeedFormat
 {
     Json,
-    Csv
+    Csv,
+    Xlsx
 }
 
 /// <summary>
-/// Один файл с данными: <see cref="Name"/> — имя таблицы или класса сущности (имя файла без расширения).
+/// Одна таблица с данными: <see cref="Name"/> — имя таблицы или класса сущности. Для JSON и CSV это
+/// имя файла без расширения, для Excel — имя листа (<see cref="Sheet"/>).
 /// </summary>
-internal sealed record SeedFile(string Name, string Origin, SeedFormat Format, Func<Stream> Open)
+internal sealed record SeedFile(string Name, string Origin, SeedFormat Format, Func<Stream> Open, string? Sheet = null)
 {
     /// <summary>
-    /// Формат по расширению: <c>.json</c> или <c>.csv</c>; для остальных файлов — <see langword="null"/>.
+    /// Формат по расширению; для остальных файлов — <see langword="null"/>.
+    /// Временные файлы Excel (<c>~$Книга.xlsx</c>) пропускаются.
     /// </summary>
-    public static SeedFormat? DetectFormat(string fileName) =>
-        Path.GetExtension(fileName).ToLowerInvariant() switch
+    public static SeedFormat? DetectFormat(string fileName)
+    {
+        if (fileName.Replace('\\', '/').Split('/', '.').Any(part => part.StartsWith("~$", StringComparison.Ordinal)))
+            return null;
+
+        return Path.GetExtension(fileName).ToLowerInvariant() switch
         {
             ".json" => SeedFormat.Json,
             ".csv" => SeedFormat.Csv,
+            ".xlsx" => SeedFormat.Xlsx,
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Файл → таблицы: книга Excel даёт по таблице на каждый лист с данными,
+    /// кроме служебных листов, имя которых начинается с «_».
+    /// </summary>
+    public static IEnumerable<SeedFile> Expand(string name, string origin, SeedFormat format, Func<Stream> open)
+    {
+        if (format != SeedFormat.Xlsx)
+            return [new SeedFile(name, origin, format, open)];
+
+        byte[] bytes;
+        using (var stream = open())
+        using (var buffer = new MemoryStream())
+        {
+            stream.CopyTo(buffer);
+            bytes = buffer.ToArray();
+        }
+
+        return XlsxReader.GetSheetNames(bytes, origin)
+            .Where(sheet => !sheet.StartsWith('_'))
+            .Select(sheet => new SeedFile(sheet.Trim(), $"{origin}, лист «{sheet}»", format, open, sheet))
+            .ToList();
+    }
 }
 
 internal interface ISeedSource
@@ -64,12 +96,14 @@ internal sealed class EmbeddedResourceSource(Assembly assembly, string folder) :
                 continue;   // файлы во вложенных папках не берём
 
             var resourceName = resource;
-            yield return new SeedFile(
+            var files = SeedFile.Expand(
                 name,
                 $"{assembly.GetName().Name}: {resourceName}",
                 format,
                 () => assembly.GetManifestResourceStream(resourceName)
                       ?? throw new JsonSeedingException($"Не удалось открыть ресурс {resourceName}."));
+            foreach (var file in files)
+                yield return file;
         }
     }
 
@@ -77,7 +111,7 @@ internal sealed class EmbeddedResourceSource(Assembly assembly, string folder) :
 }
 
 /// <summary>
-/// Файлы *.json и *.csv из папки на диске.
+/// Файлы *.json, *.csv и *.xlsx из папки на диске.
 /// </summary>
 internal sealed class DirectorySource(string path) : ISeedSource
 {
@@ -91,7 +125,7 @@ internal sealed class DirectorySource(string path) : ISeedSource
             .EnumerateFiles(fullPath)
             .Where(file => SeedFile.DetectFormat(file) is not null)
             .Order(StringComparer.OrdinalIgnoreCase)
-            .Select(file => new SeedFile(
+            .SelectMany(file => SeedFile.Expand(
                 Path.GetFileNameWithoutExtension(file), file, SeedFile.DetectFormat(file)!.Value, () => File.OpenRead(file)));
     }
 }

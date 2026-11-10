@@ -23,7 +23,7 @@
 
   <ItemGroup>
     <!-- Без LogicalName: заодно проверяется поиск ресурсов с именами по умолчанию -->
-    <EmbeddedResource Include="Seed\**\*.json;Seed\**\*.csv" />
+    <EmbeddedResource Include="Seed\**\*.json;Seed\**\*.csv;Seed\**\*.xlsx" />
   </ItemGroup>
 
   <ItemGroup>
