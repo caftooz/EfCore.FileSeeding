@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 namespace EfCore.JsonSeeding;
 
 /// <summary>
-/// Загружает JSON-файлы в базу. Таблицы, ключи и порядок загрузки берутся из модели EF,
+/// Загружает JSON- и CSV-файлы в базу. Таблицы, ключи и порядок загрузки берутся из модели EF,
 /// поэтому для новой таблицы достаточно добавить файл.
 /// </summary>
 internal sealed class JsonSeeder(JsonSeedingOptions options)
@@ -55,17 +55,85 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
     private async Task<(int Added, int Updated)> SeedFileAsync(
         DbContext db, SeedFile file, IEntityType type, CancellationToken ct)
     {
-        JsonDocument document;
-        await using (var stream = file.Open())
+        var records = await ReadRecordsAsync(file, type, ct);
+        var key = type.FindPrimaryKey()!;
+        var transforms = options.Transforms.Where(t => t.EntityType.IsAssignableFrom(type.ClrType)).ToList();
+        var added = 0;
+        var updated = 0;
+
+        foreach (var (element, where) in records)
         {
-            try
+            if (element.ValueKind != JsonValueKind.Object)
+                throw new JsonSeedingException($"{where}: ожидается объект {{ ... }}.");
+            if (options.Strict)
+                CheckUnknownProperties(element, type, transforms, where);
+
+            var entity = Deserialize(element, type, where);
+
+            var keyValues = key.Properties.Select(p => GetValue(p, entity)).ToArray();
+            if (keyValues.Any(IsDefault))
             {
-                document = await JsonDocument.ParseAsync(stream, DocumentOptions, ct);
+                throw new JsonSeedingException(
+                    $"{where}: не указан первичный ключ ({string.Join(", ", key.Properties.Select(p => p.Name))}). " +
+                    "Без ключа при каждом запуске добавлялся бы дубликат.");
             }
-            catch (JsonException ex)
+
+            foreach (var transform in transforms)
             {
-                throw new JsonSeedingException($"{file.Origin}: некорректный JSON. {ex.Message}", ex);
+                if (TryGetProperty(element, transform.JsonProperty, out var value))
+                    transform.Apply(entity, value);
             }
+
+            var existing = await db.FindAsync(type.ClrType, keyValues, ct);
+            if (existing is null)
+            {
+                db.Add(entity);
+                ApplyShadowProperties(db, entity, element, type, where);
+                added++;
+            }
+            else if (options.UpdateExisting && ApplyChanges(db, existing, entity, element, type, where))
+            {
+                updated++;
+            }
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            throw new JsonSeedingException(
+                $"{file.Origin}: база отклонила данные. {ex.InnerException?.Message ?? ex.Message}", ex);
+        }
+
+        db.ChangeTracker.Clear();
+        return (added, updated);
+    }
+
+    /// <summary>
+    /// Записи файла в едином виде: JSON-объект и место в файле для сообщений об ошибках.
+    /// </summary>
+    private static async Task<List<(JsonElement Element, string Where)>> ReadRecordsAsync(
+        SeedFile file, IEntityType type, CancellationToken ct)
+    {
+        await using var stream = file.Open();
+
+        if (file.Format == SeedFormat.Csv)
+        {
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer, ct);
+            return CsvSeedReader.Read(buffer.ToArray(), file.Origin, type);
+        }
+
+        JsonDocument document;
+        try
+        {
+            document = await JsonDocument.ParseAsync(stream, DocumentOptions, ct);
+        }
+        catch (JsonException ex)
+        {
+            throw new JsonSeedingException($"{file.Origin}: некорректный JSON. {ex.Message}", ex);
         }
 
         using (document)
@@ -73,63 +141,10 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
             if (document.RootElement.ValueKind != JsonValueKind.Array)
                 throw new JsonSeedingException($"{file.Origin}: ожидается массив записей [ {{ ... }}, {{ ... }} ].");
 
-            var key = type.FindPrimaryKey()!;
-            var transforms = options.Transforms.Where(t => t.EntityType.IsAssignableFrom(type.ClrType)).ToList();
-            var added = 0;
-            var updated = 0;
-            var number = 0;
-
-            foreach (var element in document.RootElement.EnumerateArray())
-            {
-                number++;
-                var where = $"{file.Origin}, запись №{number}";
-
-                if (element.ValueKind != JsonValueKind.Object)
-                    throw new JsonSeedingException($"{where}: ожидается объект {{ ... }}.");
-                if (options.Strict)
-                    CheckUnknownProperties(element, type, transforms, where);
-
-                var entity = Deserialize(element, type, where);
-
-                var keyValues = key.Properties.Select(p => GetValue(p, entity)).ToArray();
-                if (keyValues.Any(IsDefault))
-                {
-                    throw new JsonSeedingException(
-                        $"{where}: не указан первичный ключ ({string.Join(", ", key.Properties.Select(p => p.Name))}). " +
-                        "Без ключа при каждом запуске добавлялся бы дубликат.");
-                }
-
-                foreach (var transform in transforms)
-                {
-                    if (TryGetProperty(element, transform.JsonProperty, out var value))
-                        transform.Apply(entity, value);
-                }
-
-                var existing = await db.FindAsync(type.ClrType, keyValues, ct);
-                if (existing is null)
-                {
-                    db.Add(entity);
-                    ApplyShadowProperties(db, entity, element, type, where);
-                    added++;
-                }
-                else if (options.UpdateExisting && ApplyChanges(db, existing, entity, element, type, where))
-                {
-                    updated++;
-                }
-            }
-
-            try
-            {
-                await db.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateException ex)
-            {
-                throw new JsonSeedingException(
-                    $"{file.Origin}: база отклонила данные. {ex.InnerException?.Message ?? ex.Message}", ex);
-            }
-
-            db.ChangeTracker.Clear();
-            return (added, updated);
+            return document.RootElement
+                .EnumerateArray()
+                .Select((element, index) => (element.Clone(), $"{file.Origin}, запись №{index + 1}"))
+                .ToList();
         }
     }
 
@@ -219,7 +234,7 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
         }
     }
 
-    private static IProperty? FindProperty(IEntityType type, string name) =>
+    internal static IProperty? FindProperty(IEntityType type, string name) =>
         type.GetProperties().FirstOrDefault(p =>
             string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(p.GetColumnName(), name, StringComparison.OrdinalIgnoreCase));

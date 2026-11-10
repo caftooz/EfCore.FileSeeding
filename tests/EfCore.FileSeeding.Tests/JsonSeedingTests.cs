@@ -168,4 +168,65 @@ public sealed class JsonSeedingTests : IDisposable
 
         Assert.Contains("Products: добавлено 3, обновлено 0", log);
     }
+
+    [Fact]
+    public async Task Csv_is_seeded_like_json()
+    {
+        await using var db = await CreateEmptyDatabaseAsync();
+
+        await db.SeedFromJsonAsync(seed => seed
+            .AddEmbeddedResources(TestAssembly, "Seed/Csv")
+            .Transform<Account>("password", (account, value) => account.PasswordHash = "hash:" + value.GetString()));
+
+        var categories = await db.Categories.OrderBy(c => c.Id).ToListAsync();
+        Assert.Equal(new[] { "Продукты", "Канцелярия; бумага" }, categories.Select(c => c.Name));
+
+        var products = await db.Products.OrderBy(p => p.Id).ToListAsync();
+        Assert.Equal("Сок \"Яблочный\"", products[0].Name);
+        Assert.Equal(25.50m, products[0].Price);
+        Assert.Equal(ProductStatus.Active, products[0].Status);
+        Assert.Equal("Ручка\nсиняя", products[1].Name);
+        Assert.Equal(1234.5m, products[1].Price);
+        Assert.Equal(ProductStatus.Hidden, products[1].Status);
+        Assert.Equal(2, products[1].CategoryId);
+
+        var account = await db.Accounts.SingleAsync();
+        Assert.Equal("admin", account.Login);
+        Assert.Equal("hash:secret", account.PasswordHash);
+    }
+
+    [Fact]
+    public async Task Csv_in_windows_1251_is_read()
+    {
+        await using var db = await CreateEmptyDatabaseAsync();
+
+        await db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Csv1251"));
+
+        Assert.Equal("Овощи", (await db.Categories.SingleAsync()).Name);
+    }
+
+    [Fact]
+    public async Task Csv_unknown_column_is_reported_with_line()
+    {
+        await using var db = await CreateEmptyDatabaseAsync();
+
+        var error = await Assert.ThrowsAsync<JsonSeedingException>(
+            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/CsvTypo")));
+
+        Assert.Contains("Nmae", error.Message);
+        Assert.Contains("строка 2", error.Message);
+    }
+
+    [Fact]
+    public async Task Csv_invalid_number_is_reported_with_column()
+    {
+        await using var db = await CreateEmptyDatabaseAsync();
+
+        var error = await Assert.ThrowsAsync<JsonSeedingException>(
+            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/CsvBadNumber")));
+
+        Assert.Contains("«Id»", error.Message);
+        Assert.Contains("«один»", error.Message);
+        Assert.Contains("строка 2", error.Message);
+    }
 }

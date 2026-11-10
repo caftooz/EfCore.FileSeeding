@@ -2,10 +2,28 @@
 
 namespace EfCore.JsonSeeding;
 
+internal enum SeedFormat
+{
+    Json,
+    Csv
+}
+
 /// <summary>
-/// Один JSON-файл: <see cref="Name"/> — имя таблицы или класса сущности (имя файла без .json).
+/// Один файл с данными: <see cref="Name"/> — имя таблицы или класса сущности (имя файла без расширения).
 /// </summary>
-internal sealed record SeedFile(string Name, string Origin, Func<Stream> Open);
+internal sealed record SeedFile(string Name, string Origin, SeedFormat Format, Func<Stream> Open)
+{
+    /// <summary>
+    /// Формат по расширению: <c>.json</c> или <c>.csv</c>; для остальных файлов — <see langword="null"/>.
+    /// </summary>
+    public static SeedFormat? DetectFormat(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".json" => SeedFormat.Json,
+            ".csv" => SeedFormat.Csv,
+            _ => null
+        };
+}
 
 internal interface ISeedSource
 {
@@ -18,15 +36,13 @@ internal interface ISeedSource
 /// </summary>
 internal sealed class EmbeddedResourceSource(Assembly assembly, string folder) : ISeedSource
 {
-    private const string Extension = ".json";
-
     public IEnumerable<SeedFile> GetFiles()
     {
         var prefix = Normalize(folder).Trim('.') + ".";
 
         foreach (var resource in assembly.GetManifestResourceNames())
         {
-            if (!resource.EndsWith(Extension, StringComparison.OrdinalIgnoreCase))
+            if (SeedFile.DetectFormat(resource) is not { } format)
                 continue;
 
             var normalized = Normalize(resource);
@@ -43,7 +59,7 @@ internal sealed class EmbeddedResourceSource(Assembly assembly, string folder) :
                 start = index + 1 + prefix.Length;
             }
 
-            var name = normalized[start..^Extension.Length];
+            var name = Path.GetFileNameWithoutExtension(normalized[start..]);
             if (name.Length == 0 || name.Contains('.'))
                 continue;   // файлы во вложенных папках не берём
 
@@ -51,6 +67,7 @@ internal sealed class EmbeddedResourceSource(Assembly assembly, string folder) :
             yield return new SeedFile(
                 name,
                 $"{assembly.GetName().Name}: {resourceName}",
+                format,
                 () => assembly.GetManifestResourceStream(resourceName)
                       ?? throw new JsonSeedingException($"Не удалось открыть ресурс {resourceName}."));
         }
@@ -60,7 +77,7 @@ internal sealed class EmbeddedResourceSource(Assembly assembly, string folder) :
 }
 
 /// <summary>
-/// Файлы *.json из папки на диске.
+/// Файлы *.json и *.csv из папки на диске.
 /// </summary>
 internal sealed class DirectorySource(string path) : ISeedSource
 {
@@ -71,7 +88,10 @@ internal sealed class DirectorySource(string path) : ISeedSource
             throw new JsonSeedingException($"Папка с данными не найдена: {fullPath}");
 
         return Directory
-            .EnumerateFiles(fullPath, "*.json")
-            .Select(file => new SeedFile(Path.GetFileNameWithoutExtension(file), file, () => File.OpenRead(file)));
+            .EnumerateFiles(fullPath)
+            .Where(file => SeedFile.DetectFormat(file) is not null)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .Select(file => new SeedFile(
+                Path.GetFileNameWithoutExtension(file), file, SeedFile.DetectFormat(file)!.Value, () => File.OpenRead(file)));
     }
 }
