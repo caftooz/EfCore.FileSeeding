@@ -1,0 +1,6 @@
+// Файл называется Products, но загружается после Categories: порядок берётся из внешних ключей
+[
+  { "id": 1, "name": "Яблоко", "price": 25, "categoryId": 1 },
+  { "id": 2, "name": "Тетрадь 96 листов", "price": 120, "categoryId": 2 },
+  { "id": 3, "name": "Стиральный порошок", "price": 899, "categoryId": 1, "status": "Hidden" },
+]
