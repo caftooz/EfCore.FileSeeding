@@ -1,2 +1,4 @@
 * text=auto
+# .editorconfig требует CRLF для C#: так файлы одинаковые и в Windows, и в CI на Linux
+*.cs text eol=crlf
 *.xlsx binary
