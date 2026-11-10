@@ -1,0 +1,42 @@
+# Публикация на nuget.org при push тега v1.2.3. Ключ API не хранится:
+# nuget.org выдаёт временный ключ по Trusted Publishing (политика на nuget.org указывает этот файл).
+name: Publish
+on:
+  push:
+    tags: ['v*']
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # создать GitHub Release
+      id-token: write   # OIDC-токен для nuget.org
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Версия из тега
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - run: dotnet build EfCore.FileSeeding.slnx -c Release -p:Version=$VERSION -p:ContinuousIntegrationBuild=true
+      - run: dotnet test EfCore.FileSeeding.slnx -c Release --no-build
+      - run: dotnet pack src/EfCore.FileSeeding -c Release --no-build -p:Version=$VERSION -o artifacts
+
+      - name: NuGet login (временный ключ)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Публикация на nuget.org
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg --generate-notes

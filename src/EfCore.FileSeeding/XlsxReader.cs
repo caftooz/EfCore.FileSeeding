@@ -3,7 +3,7 @@ using System.IO.Compression;
 using System.Xml;
 using System.Xml.Linq;
 
-namespace EfCore.JsonSeeding;
+namespace EfCore.FileSeeding;
 
 /// <summary>
 /// Минимальное чтение .xlsx без сторонних библиотек: файл — это zip с XML внутри.
@@ -32,10 +32,10 @@ internal static class XlsxReader
                             .Where(s => s.Name == sheetName)
                             .Select(s => s.Path)
                             .FirstOrDefault()
-                        ?? throw new JsonSeedingException($"{origin}: лист «{sheetName}» не найден.");
+                        ?? throw new FileSeedingException($"{origin}: лист «{sheetName}» не найден.");
         var sharedStrings = ReadSharedStrings(workbook, origin);
         var document = Load(workbook, sheetPath, origin)
-                       ?? throw new JsonSeedingException($"{origin}: не найден {sheetPath}.");
+                       ?? throw new FileSeedingException($"{origin}: не найден {sheetPath}.");
 
         var rows = new List<TableRow>();
         var nextRow = 1;
@@ -67,7 +67,7 @@ internal static class XlsxReader
         }
         catch (InvalidDataException ex)
         {
-            throw new JsonSeedingException(
+            throw new FileSeedingException(
                 $"{origin}: это не файл .xlsx. Старый формат .xls не поддерживается — сохраните как «Книга Excel (.xlsx)».", ex);
         }
     }
@@ -84,7 +84,7 @@ internal static class XlsxReader
         }
         catch (XmlException ex)
         {
-            throw new JsonSeedingException($"{origin}: повреждён {path}. {ex.Message}", ex);
+            throw new FileSeedingException($"{origin}: повреждён {path}. {ex.Message}", ex);
         }
     }
 
@@ -94,7 +94,7 @@ internal static class XlsxReader
     private static List<(string Name, string Path)> GetSheets(ZipArchive workbook, string origin)
     {
         var book = Load(workbook, "xl/workbook.xml", origin)
-                   ?? throw new JsonSeedingException($"{origin}: в файле нет xl/workbook.xml — это не книга Excel.");
+                   ?? throw new FileSeedingException($"{origin}: в файле нет xl/workbook.xml — это не книга Excel.");
         var relations = Load(workbook, "xl/_rels/workbook.xml.rels", origin)?
             .Descendants()
             .Where(e => e.Name.LocalName == "Relationship")
@@ -155,7 +155,7 @@ internal static class XlsxReader
             case "s":
                 if (int.TryParse(value, out var index) && index >= 0 && index < sharedStrings.Count)
                     return new TableCell(sharedStrings[index]);
-                throw new JsonSeedingException($"{where}: повреждена ссылка на текст.");
+                throw new FileSeedingException($"{where}: повреждена ссылка на текст.");
             case "inlineStr":
                 var inline = cell.Elements().FirstOrDefault(e => e.Name.LocalName == "is");
                 return new TableCell(inline is null ? "" : TextOf(inline));
@@ -164,7 +164,7 @@ internal static class XlsxReader
             case "b":
                 return new TableCell(value == "1" ? "true" : "false");
             case "e":
-                throw new JsonSeedingException($"{where}: ошибка в формуле ({value}).");
+                throw new FileSeedingException($"{where}: ошибка в формуле ({value}).");
             default:
                 return value is null ? new TableCell("") : new TableCell(value, IsNumber: true);
         }

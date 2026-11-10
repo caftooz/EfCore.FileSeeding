@@ -1,6 +1,11 @@
-# EfCore.JsonSeeding
+# EfCore.FileSeeding
+
+[![NuGet](https://img.shields.io/nuget/v/EfCore.FileSeeding)](https://www.nuget.org/packages/EfCore.FileSeeding)
+[![CI](https://github.com/caftooz/EfCore.FileSeeding/actions/workflows/ci.yml/badge.svg)](https://github.com/caftooz/EfCore.FileSeeding/actions/workflows/ci.yml)
 
 Заполнение базы данных EF Core из JSON, CSV и книг Excel.
+
+*Seed an EF Core database from JSON, CSV and Excel files: one file (or sheet) per table, foreign-key order, safe to re-run.*
 
 - **Один файл — одна таблица** (`Products.json`, `Products.csv`), имя файла — таблица или класс сущности. В книге Excel таблица — это лист.
 - **Новая таблица = новый файл.** Код менять не нужно: таблицы, ключи и порядок загрузки берутся из модели EF.
@@ -14,11 +19,13 @@
 
 ## Подключение
 
-1. Ссылка на проект:
+1. Пакет:
 
-   ```xml
-   <ProjectReference Include="..\EfCore.JsonSeeding\EfCore.JsonSeeding.csproj" />
    ```
+   dotnet add package EfCore.FileSeeding
+   ```
+
+   или в Visual Studio: «Управление пакетами NuGet» → поиск `EfCore.FileSeeding`.
 
 2. Файлы с данными — встроенными ресурсами (тогда они найдутся и при запуске приложения, и в `dotnet ef`):
 
@@ -31,11 +38,11 @@
 3. `Program.cs`:
 
    ```csharp
-   using EfCore.JsonSeeding;
+   using EfCore.FileSeeding;
 
    builder.Services.AddDbContext<AppDbContext>(options => options
        .UseNpgsql(connectionString)
-       .UseJsonSeeding(seed => seed
+       .UseFileSeeding(seed => seed
            .AddEmbeddedResources(typeof(Program).Assembly, "Data/Seed/Reference")
            .AddEmbeddedResources(typeof(Program).Assembly, "Data/Seed/Demo",
                enabled: builder.Environment.IsDevelopment())
@@ -121,7 +128,7 @@ Id;Name;CategoryId;Price;ImagePath;IsActive
 | `ResetPostgresSequences(false)` | Отключить сдвиг счётчиков id в PostgreSQL |
 | `LogTo(Console.WriteLine)` | Отчёт: сколько записей добавлено и обновлено по каждой таблице |
 
-Ручной запуск без привязки к миграциям: `await db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(...));`
+Ручной запуск без привязки к миграциям: `await db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(...));`
 
 ## Выгрузка существующих данных из PostgreSQL
 
@@ -144,3 +151,13 @@ SELECT jsonb_pretty(jsonb_agg(to_jsonb(t) ORDER BY "Id")) FROM "Products" t;
 - В CSV и Excel пустая ячейка не очищает поле при `UpdateExisting()` — она означает «не указано».
 - Заменяет собственные `UseSeeding` / `UseAsyncSeeding` в том же контексте: EF Core хранит только одну такую настройку.
 - Синхронный запуск (`Migrate()`, `dotnet ef database update`) выполняет асинхронную загрузку с ожиданием результата. Это безопасно в консольных инструментах и ASP.NET Core, но не вызывайте `Migrate()` из UI-потока WPF/WinForms — используйте `MigrateAsync()`.
+
+## Разработка
+
+```
+dotnet build
+dotnet test
+```
+
+Новая версия публикуется на nuget.org автоматически при push тега: `git tag v1.1.0 && git push origin v1.1.0`
+(номер версии берётся из тега, см. `.github/workflows/publish.yml`).

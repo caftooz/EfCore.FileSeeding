@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace EfCore.JsonSeeding.Tests;
+namespace EfCore.FileSeeding.Tests;
 
 public enum ProductStatus
 {

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>EfCore.FileSeeding</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- NuGet-пакет. Version здесь — для локальной сборки; при публикации берётся из тега v1.2.3 -->
+  <PropertyGroup>
+    <PackageId>EfCore.FileSeeding</PackageId>
+    <Version>0.0.0-local</Version>
+    <Authors>caftooz</Authors>
+    <Description>Seed an EF Core database from JSON, CSV and Excel (.xlsx) files: one file or sheet per table, insert order by foreign keys, safe to re-run, typo checks, value transforms (e.g. password hashing), PostgreSQL identity reset. Runs via UseSeeding/UseAsyncSeeding on Migrate, EnsureCreated and dotnet ef database update.</Description>
+    <PackageTags>efcore;entity-framework-core;seed;seeding;data-seeding;json;csv;excel;xlsx;postgresql</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/caftooz/EfCore.FileSeeding</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/caftooz/EfCore.FileSeeding</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Минимальная версия: проекты на любом EF Core 10 могут подключить пакет без обновления EF -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="EfCore.FileSeeding.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -2,27 +2,27 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
-namespace EfCore.JsonSeeding.Tests;
+namespace EfCore.FileSeeding.Tests;
 
-public sealed class JsonSeedingTests : IDisposable
+public sealed class FileSeedingTests : IDisposable
 {
-    private static readonly Assembly TestAssembly = typeof(JsonSeedingTests).Assembly;
+    private static readonly Assembly TestAssembly = typeof(FileSeedingTests).Assembly;
 
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
 
-    public JsonSeedingTests() => _connection.Open();
+    public FileSeedingTests() => _connection.Open();
 
     public void Dispose() => _connection.Dispose();
 
-    private static void BasicSeed(JsonSeedingBuilder seed) => seed
+    private static void BasicSeed(FileSeedingBuilder seed) => seed
         .AddEmbeddedResources(TestAssembly, "Seed/Basic")
         .Transform<Account>("password", (account, value) => account.PasswordHash = "hash:" + value.GetString());
 
-    private TestDbContext CreateContext(Action<JsonSeedingBuilder>? seeding = null)
+    private TestDbContext CreateContext(Action<FileSeedingBuilder>? seeding = null)
     {
         var builder = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(_connection);
         if (seeding is not null)
-            builder.UseJsonSeeding(seeding);
+            builder.UseFileSeeding(seeding);
         return new TestDbContext(builder.Options);
     }
 
@@ -66,8 +66,8 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        await db.SeedFromJsonAsync(BasicSeed);
-        await db.SeedFromJsonAsync(BasicSeed);
+        await db.SeedFromFilesAsync(BasicSeed);
+        await db.SeedFromFilesAsync(BasicSeed);
 
         Assert.Equal(2, await db.Categories.CountAsync());
         Assert.Equal(3, await db.Products.CountAsync());
@@ -78,9 +78,9 @@ public sealed class JsonSeedingTests : IDisposable
     public async Task Existing_rows_are_kept_by_default()
     {
         await using var db = await CreateEmptyDatabaseAsync();
-        await db.SeedFromJsonAsync(BasicSeed);
+        await db.SeedFromFilesAsync(BasicSeed);
 
-        await db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Update"));
+        await db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Update"));
 
         Assert.Equal("Продукты", (await db.Categories.SingleAsync(c => c.Id == 1)).Name);
     }
@@ -89,9 +89,9 @@ public sealed class JsonSeedingTests : IDisposable
     public async Task UpdateExisting_changes_only_fields_from_json()
     {
         await using var db = await CreateEmptyDatabaseAsync();
-        await db.SeedFromJsonAsync(BasicSeed);
+        await db.SeedFromFilesAsync(BasicSeed);
 
-        await db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Update").UpdateExisting());
+        await db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Update").UpdateExisting());
 
         db.ChangeTracker.Clear();
         Assert.Equal("Еда", (await db.Categories.SingleAsync(c => c.Id == 1)).Name);
@@ -103,8 +103,8 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        var error = await Assert.ThrowsAsync<JsonSeedingException>(
-            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Typo")));
+        var error = await Assert.ThrowsAsync<FileSeedingException>(
+            () => db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Typo")));
 
         Assert.Contains("nmae", error.Message);
         Assert.Contains("запись №1", error.Message);
@@ -115,7 +115,7 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        await db.SeedFromJsonAsync(seed => seed
+        await db.SeedFromFilesAsync(seed => seed
             .AddEmbeddedResources(TestAssembly, "Seed/Typo")
             .AllowUnknownProperties());
 
@@ -127,8 +127,8 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        var error = await Assert.ThrowsAsync<JsonSeedingException>(
-            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/NoKey")));
+        var error = await Assert.ThrowsAsync<FileSeedingException>(
+            () => db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/NoKey")));
 
         Assert.Contains("первичный ключ", error.Message);
     }
@@ -138,8 +138,8 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        var error = await Assert.ThrowsAsync<JsonSeedingException>(
-            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/UnknownTable")));
+        var error = await Assert.ThrowsAsync<FileSeedingException>(
+            () => db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/UnknownTable")));
 
         Assert.Contains("Prodcts", error.Message);
     }
@@ -149,7 +149,7 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        await db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Basic", enabled: false));
+        await db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Basic", enabled: false));
 
         Assert.Equal(0, await db.Categories.CountAsync());
     }
@@ -160,7 +160,7 @@ public sealed class JsonSeedingTests : IDisposable
         await using var db = await CreateEmptyDatabaseAsync();
         var log = new List<string>();
 
-        await db.SeedFromJsonAsync(seed =>
+        await db.SeedFromFilesAsync(seed =>
         {
             BasicSeed(seed);
             seed.LogTo(log.Add);
@@ -174,7 +174,7 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        await db.SeedFromJsonAsync(seed => seed
+        await db.SeedFromFilesAsync(seed => seed
             .AddEmbeddedResources(TestAssembly, "Seed/Csv")
             .Transform<Account>("password", (account, value) => account.PasswordHash = "hash:" + value.GetString()));
 
@@ -200,7 +200,7 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        await db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Csv1251"));
+        await db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/Csv1251"));
 
         Assert.Equal("Овощи", (await db.Categories.SingleAsync()).Name);
     }
@@ -210,8 +210,8 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        var error = await Assert.ThrowsAsync<JsonSeedingException>(
-            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/CsvTypo")));
+        var error = await Assert.ThrowsAsync<FileSeedingException>(
+            () => db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/CsvTypo")));
 
         Assert.Contains("Nmae", error.Message);
         Assert.Contains("строка 2", error.Message);
@@ -222,8 +222,8 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        var error = await Assert.ThrowsAsync<JsonSeedingException>(
-            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/CsvBadNumber")));
+        var error = await Assert.ThrowsAsync<FileSeedingException>(
+            () => db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/CsvBadNumber")));
 
         Assert.Contains("«Id»", error.Message);
         Assert.Contains("«один»", error.Message);
@@ -236,7 +236,7 @@ public sealed class JsonSeedingTests : IDisposable
         await using var db = await CreateEmptyDatabaseAsync();
         var log = new List<string>();
 
-        await db.SeedFromJsonAsync(seed => seed
+        await db.SeedFromFilesAsync(seed => seed
             .AddEmbeddedResources(TestAssembly, "Seed/Xlsx")
             .Transform<Account>("password", (account, value) => account.PasswordHash = "hash:" + value.GetString())
             .LogTo(log.Add));
@@ -267,8 +267,8 @@ public sealed class JsonSeedingTests : IDisposable
     {
         await using var db = await CreateEmptyDatabaseAsync();
 
-        var error = await Assert.ThrowsAsync<JsonSeedingException>(
-            () => db.SeedFromJsonAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/XlsxTypo")));
+        var error = await Assert.ThrowsAsync<FileSeedingException>(
+            () => db.SeedFromFilesAsync(seed => seed.AddEmbeddedResources(TestAssembly, "Seed/XlsxTypo")));
 
         Assert.Contains("Nmae", error.Message);
         Assert.Contains("лист «Categories»", error.Message);

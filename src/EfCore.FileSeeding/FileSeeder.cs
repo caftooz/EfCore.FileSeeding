@@ -3,13 +3,13 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
-namespace EfCore.JsonSeeding;
+namespace EfCore.FileSeeding;
 
 /// <summary>
 /// Загружает в базу JSON, CSV и листы Excel. Таблицы, ключи и порядок загрузки берутся из модели EF,
 /// поэтому для новой таблицы достаточно добавить файл.
 /// </summary>
-internal sealed class JsonSeeder(JsonSeedingOptions options)
+internal sealed class FileSeeder(FileSeedingOptions options)
 {
     private const string NpgsqlProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
 
@@ -64,7 +64,7 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
         foreach (var (element, where) in records)
         {
             if (element.ValueKind != JsonValueKind.Object)
-                throw new JsonSeedingException($"{where}: ожидается объект {{ ... }}.");
+                throw new FileSeedingException($"{where}: ожидается объект {{ ... }}.");
             if (options.Strict)
                 CheckUnknownProperties(element, type, transforms, where);
 
@@ -73,7 +73,7 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
             var keyValues = key.Properties.Select(p => GetValue(p, entity)).ToArray();
             if (keyValues.Any(IsDefault))
             {
-                throw new JsonSeedingException(
+                throw new FileSeedingException(
                     $"{where}: не указан первичный ключ ({string.Join(", ", key.Properties.Select(p => p.Name))}). " +
                     "Без ключа при каждом запуске добавлялся бы дубликат.");
             }
@@ -103,7 +103,7 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
         }
         catch (DbUpdateException ex)
         {
-            throw new JsonSeedingException(
+            throw new FileSeedingException(
                 $"{file.Origin}: база отклонила данные. {ex.InnerException?.Message ?? ex.Message}", ex);
         }
 
@@ -136,13 +136,13 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
         }
         catch (JsonException ex)
         {
-            throw new JsonSeedingException($"{file.Origin}: некорректный JSON. {ex.Message}", ex);
+            throw new FileSeedingException($"{file.Origin}: некорректный JSON. {ex.Message}", ex);
         }
 
         using (document)
         {
             if (document.RootElement.ValueKind != JsonValueKind.Array)
-                throw new JsonSeedingException($"{file.Origin}: ожидается массив записей [ {{ ... }}, {{ ... }} ].");
+                throw new FileSeedingException($"{file.Origin}: ожидается массив записей [ {{ ... }}, {{ ... }} ].");
 
             return document.RootElement
                 .EnumerateArray()
@@ -156,16 +156,16 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
         try
         {
             return element.Deserialize(type.ClrType, SerializerOptions)
-                   ?? throw new JsonSeedingException($"{where}: пустая запись.");
+                   ?? throw new FileSeedingException($"{where}: пустая запись.");
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException)
         {
-            throw new JsonSeedingException($"{where}: не удалось прочитать запись как {type.ClrType.Name}. {ex.Message}", ex);
+            throw new FileSeedingException($"{where}: не удалось прочитать запись как {type.ClrType.Name}. {ex.Message}", ex);
         }
     }
 
     /// <summary>
-    /// Обновляет у существующей записи только те поля, которые явно указаны в JSON.
+    /// Обновляет у существующей записи только те поля, которые явно указаны в файле.
     /// </summary>
     private static bool ApplyChanges(
         DbContext db, object existing, object incoming, JsonElement element, IEntityType type, string where)
@@ -215,7 +215,7 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
         }
         catch (JsonException ex)
         {
-            throw new JsonSeedingException($"{where}: поле «{property.Name}» не удалось прочитать как {property.ClrType.Name}.", ex);
+            throw new FileSeedingException($"{where}: поле «{property.Name}» не удалось прочитать как {property.ClrType.Name}.", ex);
         }
     }
 
@@ -230,7 +230,7 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
                 continue;
 
             var known = string.Join(", ", type.GetProperties().Select(p => p.Name));
-            throw new JsonSeedingException(
+            throw new FileSeedingException(
                 $"{where}: неизвестное поле «{jsonProperty.Name}» (возможно, опечатка). " +
                 $"Поля {type.ClrType.Name}: {known}. " +
                 "Если поле нужно намеренно, обработайте его через Transform или включите AllowUnknownProperties().");
@@ -290,7 +290,7 @@ internal sealed class JsonSeeder(JsonSeedingOptions options)
             return type;
 
         var known = string.Join(", ", lookup.Keys.Order());
-        throw new JsonSeedingException(
+        throw new FileSeedingException(
             $"{file.Origin}: в {db.GetType().Name} нет таблицы или сущности «{file.Name}». " +
             $"Имя файла должно совпадать с одним из: {known}.");
     }

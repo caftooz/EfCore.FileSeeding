@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EfCore.FileSeeding/EfCore.FileSeeding.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EfCore.FileSeeding.Tests/EfCore.FileSeeding.Tests.csproj" />
+  </Folder>
+</Solution>

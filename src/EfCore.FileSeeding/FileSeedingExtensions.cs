@@ -1,23 +1,23 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace EfCore.JsonSeeding;
+namespace EfCore.FileSeeding;
 
 /// <summary>
-/// Подключение заполнения базы из JSON-файлов.
+/// Подключение заполнения базы из файлов JSON, CSV и Excel.
 /// </summary>
-public static class JsonSeedingExtensions
+public static class FileSeedingExtensions
 {
     /// <summary>
-    /// Включает заполнение базы из JSON-файлов. Оно выполняется автоматически после
+    /// Включает заполнение базы из файлов JSON, CSV и Excel. Оно выполняется автоматически после
     /// <c>Database.Migrate()</c> / <c>MigrateAsync()</c>, <c>EnsureCreated()</c> и <c>dotnet ef database update</c>.
     /// </summary>
     /// <remarks>
     /// Использует <c>UseSeeding</c> / <c>UseAsyncSeeding</c> из EF Core, поэтому вместе с ними
     /// в одном контексте не применяется: последняя настройка заменяет предыдущую.
     /// </remarks>
-    public static DbContextOptionsBuilder UseJsonSeeding(
+    public static DbContextOptionsBuilder UseFileSeeding(
         this DbContextOptionsBuilder optionsBuilder,
-        Action<JsonSeedingBuilder> configure)
+        Action<FileSeedingBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
         var seeder = CreateSeeder(configure);
@@ -27,33 +27,33 @@ public static class JsonSeedingExtensions
             .UseAsyncSeeding((context, _, ct) => seeder.SeedAsync(context, ct));
     }
 
-    /// <inheritdoc cref="UseJsonSeeding(DbContextOptionsBuilder, Action{JsonSeedingBuilder})"/>
-    public static DbContextOptionsBuilder<TContext> UseJsonSeeding<TContext>(
+    /// <inheritdoc cref="UseFileSeeding(DbContextOptionsBuilder, Action{FileSeedingBuilder})"/>
+    public static DbContextOptionsBuilder<TContext> UseFileSeeding<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
-        Action<JsonSeedingBuilder> configure)
+        Action<FileSeedingBuilder> configure)
         where TContext : DbContext
     {
-        ((DbContextOptionsBuilder)optionsBuilder).UseJsonSeeding(configure);
+        ((DbContextOptionsBuilder)optionsBuilder).UseFileSeeding(configure);
         return optionsBuilder;
     }
 
     /// <summary>
     /// Запускает заполнение вручную, без привязки к миграциям.
     /// </summary>
-    public static Task SeedFromJsonAsync(
+    public static Task SeedFromFilesAsync(
         this DbContext context,
-        Action<JsonSeedingBuilder> configure,
+        Action<FileSeedingBuilder> configure,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         return CreateSeeder(configure).SeedAsync(context, cancellationToken);
     }
 
-    private static JsonSeeder CreateSeeder(Action<JsonSeedingBuilder> configure)
+    private static FileSeeder CreateSeeder(Action<FileSeedingBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        var builder = new JsonSeedingBuilder();
+        var builder = new FileSeedingBuilder();
         configure(builder);
-        return new JsonSeeder(builder.Build());
+        return new FileSeeder(builder.Build());
     }
 }

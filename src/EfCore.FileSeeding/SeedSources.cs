@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace EfCore.JsonSeeding;
+namespace EfCore.FileSeeding;
 
 internal enum SeedFormat
 {
@@ -101,7 +101,7 @@ internal sealed class EmbeddedResourceSource(Assembly assembly, string folder) :
                 $"{assembly.GetName().Name}: {resourceName}",
                 format,
                 () => assembly.GetManifestResourceStream(resourceName)
-                      ?? throw new JsonSeedingException($"Не удалось открыть ресурс {resourceName}."));
+                      ?? throw new FileSeedingException($"Не удалось открыть ресурс {resourceName}."));
             foreach (var file in files)
                 yield return file;
         }
@@ -119,7 +119,7 @@ internal sealed class DirectorySource(string path) : ISeedSource
     {
         var fullPath = Path.IsPathRooted(path) ? path : Path.Combine(AppContext.BaseDirectory, path);
         if (!Directory.Exists(fullPath))
-            throw new JsonSeedingException($"Папка с данными не найдена: {fullPath}");
+            throw new FileSeedingException($"Папка с данными не найдена: {fullPath}");
 
         return Directory
             .EnumerateFiles(fullPath)

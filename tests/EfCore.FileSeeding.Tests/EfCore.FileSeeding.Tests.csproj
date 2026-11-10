@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\EfCore.JsonSeeding\EfCore.JsonSeeding.csproj" />
+    <ProjectReference Include="..\..\src\EfCore.FileSeeding\EfCore.FileSeeding.csproj" />
   </ItemGroup>
 
 </Project>

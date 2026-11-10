@@ -1,0 +1,20 @@
+version: 2
+
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: weekly
+
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
+    ignore:
+      # Минимальная поддерживаемая версия EF Core для пользователей пакета — повышаем вручную
+      - dependency-name: Microsoft.EntityFrameworkCore.Relational
+
+  - package-ecosystem: github-actions
+    directory: /
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies

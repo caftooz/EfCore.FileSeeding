@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace EfCore.JsonSeeding;
+namespace EfCore.FileSeeding;
 
 /// <summary>
 /// Разбирает CSV в строки таблицы; дальше их обрабатывает <see cref="TableSeedReader"/>.

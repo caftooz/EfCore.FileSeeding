@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore.Metadata;
 
-namespace EfCore.JsonSeeding;
+namespace EfCore.FileSeeding;
 
 /// <summary>
 /// Ячейка таблицы. <see cref="IsNumber"/> — число из Excel (в том числе дата, которую Excel хранит числом).
@@ -28,7 +28,7 @@ internal static class TableSeedReader
             return records;
 
         var headers = ReadHeader(rows[0], origin);
-        var properties = headers.Select(h => h.Length == 0 ? null : JsonSeeder.FindProperty(type, h)).ToArray();
+        var properties = headers.Select(h => h.Length == 0 ? null : FileSeeder.FindProperty(type, h)).ToArray();
 
         foreach (var row in rows.Skip(1))
         {
@@ -45,7 +45,7 @@ internal static class TableSeedReader
                 {
                     if (cell.Text.Trim().Length == 0)
                         continue;
-                    throw new JsonSeedingException(
+                    throw new FileSeedingException(
                         $"{where}: значение «{cell.Text}» в столбце №{i + 1}, у которого нет названия в первой строке.");
                 }
 
@@ -71,7 +71,7 @@ internal static class TableSeedReader
             .GroupBy(h => h, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(g => g.Count() > 1);
         if (duplicate is not null)
-            throw new JsonSeedingException($"{origin}, строка {row.Line}: столбец «{duplicate.Key}» указан дважды.");
+            throw new FileSeedingException($"{origin}, строка {row.Line}: столбец «{duplicate.Key}» указан дважды.");
         return headers;
     }
 
@@ -156,6 +156,6 @@ internal static class TableSeedReader
         return value.Replace(',', '.');
     }
 
-    private static JsonSeedingException Invalid(string where, string column, string cell, string expected) =>
+    private static FileSeedingException Invalid(string where, string column, string cell, string expected) =>
         new($"{where}: в столбце «{column}» значение «{cell}», ожидается {expected}.");
 }
